@@ -26,6 +26,8 @@ ritorna false.
 
 #include <iostream>
 #include <string>
+#include <vector>
+#include <typeinfo>
 
 class FileAudio
 {
@@ -34,11 +36,19 @@ private:
     std::string title;
 
 public:
+    FileAudio(const std::string &titolo, double dimensione) : MB(dimensione), title(titolo) {}
     virtual ~FileAudio() = default;
+
     virtual FileAudio *clonazione() const = 0;
     virtual bool qualità() const = 0;
+
     double getSize() const { return MB; }
-    virtual bool operator==(const FileAudio &fa) const { return typeid(*this) == typeid(fa) && title == fa.title && MB == fa.MB; }
+    std::string getTitolo() const { return title; }
+
+    virtual bool operator==(const FileAudio &fa) const
+    {
+        return typeid(*this) == typeid(fa) && title == fa.title && MB == fa.MB;
+    }
 };
 
 class Mp3 : public FileAudio
@@ -48,57 +58,40 @@ private:
     static unsigned int br_threshold;
 
 public:
-    Mp3 *clonazione() const override;
-    bool qualità() const override;
-    unsigned int getBitrate() const;
+    Mp3(const std::string &titolo, double dimensione, unsigned int bitrate)
+        : FileAudio(titolo, dimensione), bitrate(bitrate) {}
+
+    Mp3 *clonazione() const override { return new Mp3(*this); }
+    bool qualità() const override { return bitrate >= br_threshold; }
+    unsigned int getBitrate() const { return bitrate; }
+
     bool operator==(const FileAudio &fa) const override
     {
         return this->FileAudio::operator==(fa) && bitrate == static_cast<const Mp3 &>(fa).bitrate;
     }
 };
 unsigned int Mp3::br_threshold = 192;
-Mp3 *Mp3::clonazione() const
-{
-    return new Mp3(*this);
-}
-bool Mp3::qualità() const
-{
-    return bitrate >= 192;
-}
-unsigned int Mp3::getBitrate() const
-{
-    return bitrate;
-}
-typedef int kHz;
+
 class WAV : public FileAudio
 {
 private:
-    kHz frequency;
+    unsigned int frequency;
     bool lossless;
     static unsigned int fr_threshold;
 
 public:
-    WAV *clonazione() const override;
-    bool qualità() const override;
-    bool isLossLess() const;
+    WAV(const std::string &titolo, double dimensione, unsigned int frequenza, bool lossless)
+        : FileAudio(titolo, dimensione), frequency(frequenza), lossless(lossless) {}
+
+    WAV *clonazione() const override { return new WAV(*this); }
+    bool qualità() const override { return frequency >= fr_threshold; }
+    bool isLossLess() const { return lossless; }
+
     bool operator==(const FileAudio &fa) const override
     {
         return this->FileAudio::operator==(fa) && frequency == static_cast<const WAV &>(fa).frequency && lossless == static_cast<const WAV &>(fa).lossless;
     }
 };
-
-WAV *WAV::clonazione() const
-{
-    return new WAV(*this);
-}
-bool WAV::qualità() const
-{
-    return frequency >= 96;
-}
-bool WAV::isLossLess() const
-{
-    return lossless;
-}
 unsigned int WAV::fr_threshold = 96;
 /*(B) Definire una classe iZod i cui oggetti rappresentano i brani memorizzati in un iZod. La classe iZod deve soddisfare le seguenti specifiche:
 `
@@ -120,8 +113,6 @@ Brano(p) costruisce un oggetto Brano il cui puntatore polimorfo punta ad una cop
 
 • Un metodo void insert(Mp3*) con il seguente comportamento: una invocazione iz.insert(p) inserisce il nuovo oggetto Brano(p) nel vector dei brani memorizzati nell’iZod iz se il file audio mp3 *p non è già memorizzato in iz, mentre se il file audio *p risulta già memorizzato non provoca alcun effetto.
 */
-#include <vector>
-
 class iZod
 {
 private:
@@ -142,6 +133,7 @@ private:
             return *this;
         }
     };
+
     std::vector<Brano> brani;
 
 public:
@@ -154,8 +146,14 @@ std::vector<Mp3> iZod::mp3(double dim, int bitrate) const
 {
     std::vector<Mp3> braniToSave;
     for (std::vector<Brano>::const_iterator cit = brani.begin(); cit != brani.end(); cit++)
+    {
+
         if (dynamic_cast<Mp3 *>(cit->p) && (cit->p)->getSize() >= dim && (static_cast<Mp3 *>(cit->p)->getBitrate() >= bitrate))
+        {
+
             braniToSave.push_back(*(static_cast<Mp3 *>(cit->p)));
+        }
+    }
     return braniToSave;
 }
 
@@ -166,7 +164,7 @@ std::vector<FileAudio *> iZod::braniQual() const
     {
         WAV *p = dynamic_cast<WAV *>(cit->p);
         if (cit->p && (cit->p)->qualità() && (!p || p->isLossLess()))
-            w.push_back(p);
+            w.push_back(cit->p);
     }
     return w;
 }
@@ -182,4 +180,42 @@ void iZod::insert(Mp3 *p)
         if (!found)
             brani.push_back(p);
     }
+}
+
+int main()
+{
+    // Creazione di file audio
+    Mp3 mp3_1("Song1", 5.0, 256);             // Titolo: "Song1", Dimensione: 5 MB, Bitrate: 256 Kbit/s
+    Mp3 mp3_2("Song2", 4.0, 128);             // Titolo: "Song2", Dimensione: 4 MB, Bitrate: 128 Kbit/s
+    WAV wav_1("Classical1", 50.0, 96, true);  // Titolo: "Classical1", Dimensione: 50 MB, Frequenza: 96 kHz, Lossless
+    WAV wav_2("Classical2", 20.0, 44, false); // Titolo: "Classical2", Dimensione: 20 MB, Frequenza: 44 kHz, Lossy
+
+    // Creazione di un oggetto iZod
+    iZod iz;
+
+    // Inserimento di file audio
+    iz.insert(&mp3_1);
+    iz.insert(&mp3_2);
+
+    // Recupero degli Mp3 che soddisfano determinati criteri
+    double minSize = 3.0; // Dimensione minima in MB
+    int minBitrate = 192; // Bitrate minimo in Kbit/s
+    std::vector<Mp3> filteredMp3 = iz.mp3(minSize, minBitrate);
+
+    std::cout << "Mp3 filtrati (dimensione >= " << minSize << " MB e bitrate >= " << minBitrate << " Kbit/s):\n";
+    for (const auto &mp3 : filteredMp3)
+    {
+        std::cout << "  Titolo: " << mp3.getTitolo() << ", Dimensione: " << mp3.getSize() << " MB, Bitrate: " << mp3.getBitrate() << " Kbit/s\n";
+    }
+
+    // Recupero dei file audio di qualità
+    std::vector<FileAudio *> qualityFiles = iz.braniQual();
+
+    std::cout << "\nFile audio di qualità:\n";
+    for (const auto *file : qualityFiles)
+    {
+        std::cout << "  Titolo: " << file->getTitolo() << ", Dimensione: " << file->getSize() << " MB\n";
+    }
+
+    return 0;
 }
