@@ -6,7 +6,8 @@
 #include <QVBoxLayout>
 #include "Hardware.h"
 
-class MainWidget : public QWidget {
+class MainWidget : public QWidget
+{
     Q_OBJECT
 
 public:
@@ -15,11 +16,11 @@ public:
 
 private slots:
     void createStorage();
-    
+
     void createCpu();
 
 private:
-    Hardware* hardware;
+    Hardware *hardware;
     QVBoxLayout *layout;
     QPushButton *storageButton;
     QPushButton *cpuButton;
